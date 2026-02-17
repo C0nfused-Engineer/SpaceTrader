@@ -170,6 +170,7 @@ Action Input::readActionBlocking() {
             if (ch == L'q' || ch == L'Q') return { ActionType::Back, 0, 0 };
             if (ch == L'l' || ch == L'L') return { ActionType::ClearLog, 0, 0 };
             if (ch == L'e' || ch == L'E') return { ActionType::SidebarToggle, 0, 0 };
+            if (ch == L'n' || ch == L'N') return { ActionType::No, 0, 0 };
         }
     }
     return { ActionType::None, 0, 0 };

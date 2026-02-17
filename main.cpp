@@ -151,8 +151,7 @@ struct GameState {
     GameDate date;
 
     int incomeWeekly = 0; // weekly credits set to zero (crew pay comes later)
-    int prestige = 10;
-    int prestigeWeekly = 0;
+    int reputation = 10;
 
 
     Player P;
@@ -200,6 +199,18 @@ struct GameState {
 	bool showRouteSystem = false;
 
 };
+
+int estimateGalaxyTravelWeeks(const GameState& S, int fromSystem, int toSystem)
+{
+    const StarSystem& a = S.galaxy[fromSystem];
+    const StarSystem& b = S.galaxy[toSystem];
+
+    int dist = chebyshev(a.gx, a.gy, b.gx, b.gy);
+
+    int jumps = (dist + GALAXY_JUMP_RANGE - 1) / GALAXY_JUMP_RANGE;
+    return jumps; // 1 week per jump
+}
+
 
 static std::vector<std::pair<int,int>> buildRoute(int sx,int sy,int tx,int ty,int range){
     std::vector<std::pair<int,int>> out;
@@ -301,7 +312,6 @@ static int nearestPoiIndex(const StarSystem& sys, int x, int y) {
 static void advanceWeek(GameState& S, int weeks) {
     S.date.advanceWeeks(weeks);
     S.P.credits += S.incomeWeekly * weeks;   // currently 0
-    S.prestige  += S.prestigeWeekly * weeks;
 }
 static int ftlFuelCost(int dist) { return std::max(1, dist / 3); }
 
@@ -400,7 +410,7 @@ static void generateOffersForDock(GameState& S) {
 		int dist = manhattan(S.galaxy[S.currentSystem].gx, S.galaxy[S.currentSystem].gy,
 							 S.galaxy[m.toSystem].gx,      S.galaxy[m.toSystem].gy);
 
-		m.deadlineWeeks = 6 + dist * 2;
+		m.deadlineWeeks = estimateGalaxyTravelWeeks(S, m.fromSystem, m.toSystem) * 1.5f + 2;
 		m.reward = 150 + m.amount * (25 + (int)(hash32(r + 400 + k) % 45)) + dist * 10;
 
 		S.poiOffers.push_back(m);
@@ -885,7 +895,7 @@ static void renderSidebar(termui::Canvas& C, const termui::Rect& r, const GameSt
 				<< L": " << m.amount << L" " << goodNameW(m.good)
 				<< L" (" << m.deadlineWeeks << L"w)";
             panelPrintLine(C, r, y, oss.str());
-            if (++shown >= 4) break;
+            if (++shown >= 8) break;
         }
         if (shown == 0) panelPrintLine(C, r, y, L"(none)");
         return;
@@ -1178,6 +1188,7 @@ static void marketTradeOne(GameState& S) {
 
 // ---------------- Main ----------------
 int main() {
+	std::cout << "Debug Welcome Menu: Press ENTER to play" << std::endl;
 	std::cin.get();
 	
     termui::Canvas C;
