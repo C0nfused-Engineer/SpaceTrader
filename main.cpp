@@ -8,7 +8,10 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
+#include <ctime>
+#include <cstdlib>
 #include <iostream>
+#include <random>
 
 static constexpr int GALAXY_JUMP_RANGE = 3;
 static constexpr int SYSTEM_JUMP_RANGE = 6;
@@ -149,6 +152,8 @@ enum class SidebarPage { Status, Cargo, Missions }; // NEW: Missions page
 
 struct GameState {
     GameDate date;
+
+	int seed;
 
     int incomeWeekly = 0; // weekly credits set to zero (crew pay comes later)
     int reputation = 10;
@@ -375,6 +380,8 @@ static void generateOffersForDock(GameState& S) {
     seed ^= (uint32_t)poi * 0x85EBCA6Bu;
     seed ^= (uint32_t)(S.date.year * 131u + S.date.month * 17u + S.date.week);
 
+	seed ^= hash32(S.seed);
+
     uint32_t r = hash32(seed);
 
     auto roll = [&](int mod)->int {
@@ -490,14 +497,36 @@ static void declineSelectedOffer(GameState& S) {
 
 // ---------------- World init ----------------
 static void initGalaxy(GameState& S) {
-    S.galaxy = {
-        { L"Sol",     12, 10, {} },
-        { L"Arcadia", 28,  8, {} },
-        { L"Kestrel", 36, 16, {} },
-        { L"Orpheon", 18, 22, {} },
-        { L"Vesta",    6, 20, {} },
-        { L"Helios",  30, 24, {} },
-    };
+    S.seed = rand();
+	
+	S.galaxy = {
+		{ L"Sol",              30, 30, {} },
+		{ L"Alpha Centauri",   36, 28, {} },
+		{ L"Proxima Centauri", 37, 27, {} },
+		{ L"Barnard's Star",   26, 34, {} },
+		{ L"Wolf 359",         22, 29, {} },
+		{ L"Lalande 21185",    18, 24, {} },
+		{ L"Sirius",           42, 33, {} },
+		{ L"Luyten 726-8",     24, 20, {} },
+		{ L"Ross 154",         40, 24, {} },
+		{ L"Ross 248",         28, 18, {} },
+		{ L"Epsilon Eridani",  48, 30, {} },
+		{ L"Tau Ceti",         50, 22, {} },
+		{ L"Kapteyn's Star",   16, 36, {} },
+		{ L"Groombridge 34",   34, 40, {} },
+		{ L"61 Cygni",         38, 44, {} },
+		{ L"Struve 2398",      20, 42, {} },
+		{ L"Gliese 876",       12, 28, {} },
+		{ L"YZ Ceti",          46, 16, {} },
+		{ L"Teegarden's Star", 10, 34, {} },
+		{ L"Gliese 667",       52, 38, {} },
+		{ L"HD 85512",         44, 46, {} },
+		{ L"Gliese 581",       14, 18, {} },
+		{ L"Delta Pavonis",    54, 26, {} },
+		{ L"Altair",           32, 12, {} },
+		{ L"Fomalhaut",        58, 32, {} },
+	};
+
 
     auto addPois = [&](StarSystem& sys, uint32_t sysSeed) {
         sys.pois.push_back({ sys.name + L" Prime", PoiType::Planet, 10, 8,  makeMarket(sysSeed + 1, PoiType::Planet) });
@@ -1188,6 +1217,7 @@ static void marketTradeOne(GameState& S) {
 
 // ---------------- Main ----------------
 int main() {
+	srand((unsigned)time(nullptr));
 	std::cout << "Debug Welcome Menu: Press ENTER to play" << std::endl;
 	std::cin.get();
 	
