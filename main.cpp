@@ -216,6 +216,14 @@ static bool routeContains(const std::vector<std::pair<int,int>>& r, int x, int y
     return false;
 }
 
+static int systemIndexAtGalaxy(const GameState& S, int gx, int gy){
+    for (int i=0;i<(int)S.galaxy.size();i++){
+        if (S.galaxy[i].gx==gx && S.galaxy[i].gy==gy) return i;
+    }
+    return -1;
+}
+
+
 
 // Returns true if any active mission targets this system. Also counts how many.
 static int countMissionsToSystem(const GameState& S, int systemIndex) {
@@ -316,6 +324,7 @@ static void tickMissionDeadlines(GameState& S, int weeksAdvanced) {
 
 static void tryCompleteMissionsOnDock(GameState& S) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 
     for (auto& m : S.activeMissions) {
         if (!m.active || m.completed) continue;
@@ -347,6 +356,7 @@ static void tryCompleteMissionsOnDock(GameState& S) {
 // ---------------- NEW: generate offers at a POI ----------------
 static void generateOffersForDock(GameState& S) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
     int poi = S.dockPoiIndex;
 
     // deterministic-ish per (system, poi, date)
@@ -412,6 +422,7 @@ static void generateOffersForDock(GameState& S) {
 
 static void dockAtPoi(GameState& S, int poiIndex, bool autoOpenMissions) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 
     S.dockPoiIndex = poiIndex;
     S.shipX = sys.pois[poiIndex].x;
@@ -437,6 +448,7 @@ static void acceptSelectedOffer(GameState& S) {
     S.activeMissions.push_back(m);
 
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 	const StarSystem& dst = S.galaxy[m.toSystem];
 
 	std::wstringstream oss;
@@ -489,6 +501,10 @@ static void initGalaxy(GameState& S) {
 
     S.currentSystem = 0;
     S.gCurX = S.galaxy[0].gx; S.gCurY = S.galaxy[0].gy;
+
+    // Start in orbit of the starting system (galaxy-space position)
+    S.shipGX = S.galaxy[0].gx;
+    S.shipGY = S.galaxy[0].gy;
 
     // Start docked at first POI
     S.sCurX = S.galaxy[0].pois[0].x;
@@ -605,8 +621,8 @@ static void renderGalaxyMap(termui::Canvas& C, const termui::Rect& r, GameState&
         return -1;
     };
 
-    int shipGX = S.galaxy[S.currentSystem].gx;
-    int shipGY = S.galaxy[S.currentSystem].gy;
+    int shipGX = S.shipGX;
+    int shipGY = S.shipGY;
 
     for(int row=0; row<rows; row++){
         int gy = S.gCamY + row;
@@ -640,6 +656,7 @@ static void renderGalaxyMap(termui::Canvas& C, const termui::Rect& r, GameState&
 
 static void renderSystemMap(termui::Canvas& C, const termui::Rect& r, GameState& S) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
     std::wstring title =
         L"SYSTEM: " + sys.name + L"  (ENTER=STL  SPACE=Market  TAB=Galaxy)";
     C.drawBox(r, title);
@@ -690,6 +707,7 @@ static void renderSystemMap(termui::Canvas& C, const termui::Rect& r, GameState&
 
 static void renderMarket(termui::Canvas& C, const termui::Rect& r, GameState& S) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 
     int shipPoi = poiIndexAt(sys, S.shipX, S.shipY);
     if (shipPoi < 0) shipPoi = nearestPoiIndex(sys, S.shipX, S.shipY);
@@ -810,6 +828,7 @@ static void renderSidebar(termui::Canvas& C, const termui::Rect& r, const GameSt
     };
 
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 
     if (S.sidePage == SidebarPage::Cargo) {
         section(L"Cargo Hold");
@@ -873,13 +892,16 @@ static void renderSidebar(termui::Canvas& C, const termui::Rect& r, const GameSt
     }
 
     // STATUS page
-	section(L"Current System");
-	panelPrintLine(C, r, y, sys.name, termui::FG_BRIGHT | termui::FG_WHITE);
-
-	// Show docked POI + type
-	{
-		const auto& dock = sys.pois[S.dockPoiIndex];
+	section(L"Current Location");
+	if (shipSystem >= 0) {
+		panelPrintLine(C, r, y, S.galaxy[shipSystem].name, termui::FG_BRIGHT | termui::FG_WHITE);
+		const auto& dock = S.galaxy[shipSystem].pois[S.dockPoiIndex];
 		panelPrintLine(C, r, y, L"Ship @ " + dock.name + L" (" + poiTypeNameW(dock.type) + L")");
+	} else {
+		std::wstringstream loc;
+		loc << L"Deep Space (" << S.shipGX << L"," << S.shipGY << L")";
+		panelPrintLine(C, r, y, loc.str(), termui::FG_BRIGHT | termui::FG_WHITE);
+		panelPrintLine(C, r, y, L"(not docked)");
 	}
 
 	panelPrintLine(C, r, y, L"");
@@ -1017,24 +1039,21 @@ static void renderAll(termui::Canvas& C, const termui::Layout& L, GameState& S) 
 
 // ---------------- Game actions ----------------
 static void doGalaxyJump(GameState& S) {
-    // Find system at cursor
-    int target = -1;
-    for(int i=0;i<(int)S.galaxy.size();i++){
-        if (S.galaxy[i].gx==S.gCurX && S.galaxy[i].gy==S.gCurY) { target=i; break; }
-    }
-    if (target < 0) { S.pushLog(L"Jump: No system at cursor."); return; }
-    if (target == S.currentSystem) { S.pushLog(L"Jump: Already here."); return; }
+    // Jump target is the cursor position (galaxy-space), even if it's empty space.
+    const int GW=45, GH=30;
+    int tx = termui::clampi(S.gCurX, 0, GW-1);
+    int ty = termui::clampi(S.gCurY, 0, GH-1);
 
-    const auto& cur = S.galaxy[S.currentSystem];
-    const auto& dst = S.galaxy[target];
+    int dist = chebyshev(S.shipGX, S.shipGY, tx, ty);
+    if (dist == 0) { S.pushLog(L"Jump: You are already there."); return; }
 
-    int dist = chebyshev(cur.gx, cur.gy, dst.gx, dst.gy);
+    // One jump = one week. If target is out of range, we jump toward it by the range.
+    int nx = S.shipGX;
+    int ny = S.shipGY;
     if (dist > GALAXY_JUMP_RANGE) {
-        std::wstringstream oss;
-        oss << L"Jump out of range. Need " << jumpsRequired(dist, GALAXY_JUMP_RANGE)
-            << L" jumps (range " << GALAXY_JUMP_RANGE << L").";
-        S.pushLog(oss.str());
-        return;
+        stepToward(nx, ny, tx, ty, GALAXY_JUMP_RANGE);
+    } else {
+        nx = tx; ny = ty;
     }
 
     if (S.P.fuel < GALAXY_FUEL_PER_JUMP) { S.pushLog(L"Jump: Not enough fuel."); return; }
@@ -1044,23 +1063,36 @@ static void doGalaxyJump(GameState& S) {
     advanceWeek(S, 1);
     tickMissionDeadlines(S, 1);
 
-    S.currentSystem = target;
+    S.shipGX = nx;
+    S.shipGY = ny;
+
+    int landedSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 
     std::wstringstream oss;
-    oss << L"FTL jump to " << dst.name << L" (1 week, -" << GALAXY_FUEL_PER_JUMP << L" fuel).";
-    S.pushLog(oss.str());
+    if (landedSystem >= 0) {
+        S.currentSystem = landedSystem;
 
-    // On arrival, place you at POI #0 and dock (offers, potential delivery completion)
-    const auto& sys = S.galaxy[S.currentSystem];
-    S.sCurX = sys.pois[0].x;
-    S.sCurY = sys.pois[0].y;
+        oss << L"FTL jump to " << S.galaxy[landedSystem].name
+            << L" (1 week, -" << GALAXY_FUEL_PER_JUMP << L" fuel).";
+        S.pushLog(oss.str());
 
-    dockAtPoi(S, 0, /*autoOpenMissions=*/true);
+        // On arrival, place you at POI #0 and dock (offers, potential delivery completion)
+        const auto& sys = S.galaxy[S.currentSystem];
+        S.sCurX = sys.pois[0].x;
+        S.sCurY = sys.pois[0].y;
+
+        dockAtPoi(S, 0, /*autoOpenMissions=*/true);
+    } else {
+        oss << L"FTL jump into deep space (" << S.shipGX << L"," << S.shipGY
+            << L") (1 week, -" << GALAXY_FUEL_PER_JUMP << L" fuel).";
+        S.pushLog(oss.str());
+        // Stay in Galaxy view; System/Market requires landing on a system.
+    }
 }
-
 
 static void doSystemJump(GameState& S) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
 
     // Jump target is the cursor position (clamped to system bounds)
     const int SW=40, SH=20;
@@ -1105,6 +1137,7 @@ static void doSystemJump(GameState& S) {
 
 static void marketTradeOne(GameState& S) {
     const StarSystem& sys = S.galaxy[S.currentSystem];
+    int shipSystem = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
     const SystemPoi& poi = sys.pois[S.dockPoiIndex]; // dock market
 
     Good g = (Good)S.marketSel;
@@ -1220,7 +1253,17 @@ int main() {
                 S.marketModeBuy = !S.marketModeBuy;
                 S.pushLog(S.marketModeBuy ? L"Market: BUY mode." : L"Market: SELL mode.");
             } else {
-                S.screen = (S.screen == Screen::Galaxy) ? Screen::System : Screen::Galaxy;
+                if (S.screen == Screen::Galaxy) {
+                    int at = systemIndexAtGalaxy(S, S.shipGX, S.shipGY);
+                    if (at < 0) {
+                        S.pushLog(L"Cannot enter System view: you are in deep space.");
+                    } else {
+                        S.currentSystem = at; // ensure index matches where you're actually located
+                        S.screen = Screen::System;
+                    }
+                } else {
+                    S.screen = Screen::Galaxy;
+                }
             }
             renderAll(C, L, S);
             continue;
