@@ -205,6 +205,16 @@ struct GameState {
 
 };
 
+bool hasMissionAtSystem(const GameState& S, int systemIndex)
+{
+    for (const Mission& m : S.activeMissions)
+    {
+        if (m.active && !m.completed && m.toSystem == systemIndex)
+            return true;
+    }
+    return false;
+}
+
 int estimateGalaxyTravelWeeks(const GameState& S, int fromSystem, int toSystem)
 {
     const StarSystem& a = S.galaxy[fromSystem];
@@ -417,7 +427,7 @@ static void generateOffersForDock(GameState& S) {
 		int dist = manhattan(S.galaxy[S.currentSystem].gx, S.galaxy[S.currentSystem].gy,
 							 S.galaxy[m.toSystem].gx,      S.galaxy[m.toSystem].gy);
 
-		m.deadlineWeeks = estimateGalaxyTravelWeeks(S, m.fromSystem, m.toSystem) * 1.5f + 2;
+		m.deadlineWeeks = estimateGalaxyTravelWeeks(S, m.fromSystem, m.toSystem) * 2.0f + 4;
 		m.reward = 150 + m.amount * (25 + (int)(hash32(r + 400 + k) % 45)) + dist * 10;
 
 		S.poiOffers.push_back(m);
@@ -643,7 +653,7 @@ static void renderGalaxyMap(termui::Canvas& C, const termui::Rect& r, GameState&
     C.drawBox(r, L"GALAXY MAP  (ENTER=FTL  TAB=System)");
     C.clearInside(r, termui::FG_WHITE);
 
-    const int GW=45, GH=30;
+    const int GW=120, GH=80;
     S.gCurX = termui::clampi(S.gCurX, 0, GW-1);
     S.gCurY = termui::clampi(S.gCurY, 0, GH-1);
 
@@ -674,15 +684,17 @@ static void renderGalaxyMap(termui::Canvas& C, const termui::Rect& r, GameState&
             int si = sysAt(gx, gy);
             bool isSystem = (si >= 0);
 
-            wchar_t base = isSystem ? L'✦' : L'·';
+            wchar_t base = isSystem ? L'◇' : L'·';
 
             bool isShip = (gx == shipGX && gy == shipGY);
             bool isCur  = (gx == S.gCurX && gy == S.gCurY);
+			bool hasMission = hasMissionAtSystem(S, si);
 
             wchar_t g = base;
             if (isShip && isCur) g = L'▣';
             else if (isShip)     g = L'▲';
             else if (isCur)      g = isSystem ? L'□' : L'■';
+			else if (hasMission) g = L'◈';
 
             line.push_back(g);
             line.push_back(L' ');
@@ -725,16 +737,18 @@ static void renderSystemMap(termui::Canvas& C, const termui::Rect& r, GameState&
             if (pi >= 0) {
                 if (sys.pois[pi].type == PoiType::Planet) base = L'◉';
                 else if (sys.pois[pi].type == PoiType::Station) base = L'⛯';
-                else base = L'◈';
+                else base = L'◎';
             }
 
             bool isShip = (sx == S.shipX && sy == S.shipY);
             bool isCur  = (sx == S.sCurX  && sy == S.sCurY);
+			bool hasMission = hasMissionAtSystem(S, pi);
 
             wchar_t g = base;
             if (isShip && isCur) g = L'▣';
             else if (isShip)     g = L'▲';
             else if (isCur)      g = L'■';
+			else if (hasMission) g = L'◈';
 
             line.push_back(g);
             line.push_back(L' ');
@@ -1219,6 +1233,7 @@ static void marketTradeOne(GameState& S) {
 int main() {
 	srand((unsigned)time(nullptr));
 	std::cout << "Debug Welcome Menu: Press ENTER to play" << std::endl;
+	std::cout << "MAXIMIZE WINDOW NOW" << std::endl;
 	std::cin.get();
 	
     termui::Canvas C;
