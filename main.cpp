@@ -340,6 +340,7 @@ static void tickMissionDeadlines(GameState& S, int weeksAdvanced) {
         if (!m.active || m.completed) continue;
         if (m.deadlineWeeks < 0) {
             m.active = false;
+			S.P.credits -= m.reward;
             std::wstringstream oss;
             oss << L"Mission FAILED: Delivery to " << S.galaxy[m.toSystem].name << L" expired.";
             S.pushLog(oss.str());
@@ -427,7 +428,7 @@ static void generateOffersForDock(GameState& S) {
 		int dist = manhattan(S.galaxy[S.currentSystem].gx, S.galaxy[S.currentSystem].gy,
 							 S.galaxy[m.toSystem].gx,      S.galaxy[m.toSystem].gy);
 
-		m.deadlineWeeks = estimateGalaxyTravelWeeks(S, m.fromSystem, m.toSystem) * 2.0f + 4;
+		m.deadlineWeeks = estimateGalaxyTravelWeeks(S, m.fromSystem, m.toSystem) * 3.0f + 10;
 		m.reward = 150 + m.amount * (25 + (int)(hash32(r + 400 + k) % 45)) + dist * 10;
 
 		S.poiOffers.push_back(m);
